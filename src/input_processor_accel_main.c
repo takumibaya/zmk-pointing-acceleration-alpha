@@ -119,6 +119,76 @@ static int accel_init_device(const struct device *dev) {
 // Create device instances for all enabled DT nodes
 DT_INST_FOREACH_STATUS_OKAY(ACCEL_DEVICE_DEFINE)
 
+#if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+static struct k_spinlock config_lock;
+
+int accel_get_params(const struct device *dev, struct accel_params *out) {
+    if (!dev || !out || !device_is_ready(dev)) {
+        return -EINVAL;
+    }
+    const struct accel_config *cfg = dev->config;
+    if (cfg->level != 2) {
+        return -EINVAL;
+    }
+    k_spinlock_key_t key = k_spin_lock(&config_lock);
+    *out = (struct accel_params){
+        .sensitivity = cfg->cfg.level2.sensitivity,
+        .min_factor = cfg->cfg.level2.min_factor,
+        .max_factor = cfg->cfg.level2.max_factor,
+        .speed_threshold = cfg->cfg.level2.speed_threshold,
+        .speed_max = cfg->cfg.level2.speed_max,
+        .y_boost = accel_decode_y_boost(cfg->y_boost_scaled),
+    };
+    k_spin_unlock(&config_lock, key);
+    return 0;
+}
+
+int accel_set_params(const struct device *dev, const struct accel_params *in) {
+    if (!dev || !in || !device_is_ready(dev)) {
+        return -EINVAL;
+    }
+    struct accel_config *cfg = (struct accel_config *)dev->config;
+    if (cfg->level != 2) {
+        return -EINVAL;
+    }
+    if (!IN_RANGE(in->sensitivity, SENSITIVITY_MIN, 1000) ||
+        !IN_RANGE(in->min_factor, MIN_FACTOR_MIN, MIN_FACTOR_MAX) ||
+        !IN_RANGE(in->max_factor, MAX_FACTOR_MIN, MAX_FACTOR_MAX) ||
+        !IN_RANGE(in->speed_threshold, SPEED_THRESHOLD_MIN, SPEED_THRESHOLD_MAX) ||
+        !IN_RANGE(in->speed_max, SPEED_MAX_MIN, SPEED_MAX_MAX) ||
+        !IN_RANGE(in->y_boost, 1000, 3000) || in->y_boost % 10 ||
+        in->min_factor > in->max_factor || in->speed_threshold >= in->speed_max) {
+        return -ERANGE;
+    }
+
+    k_spinlock_key_t key = k_spin_lock(&config_lock);
+    struct accel_config candidate = *cfg;
+    k_spin_unlock(&config_lock, key);
+    candidate.cfg.level2.sensitivity = in->sensitivity;
+    candidate.cfg.level2.min_factor = in->min_factor;
+    candidate.cfg.level2.max_factor = in->max_factor;
+    candidate.cfg.level2.speed_threshold = in->speed_threshold;
+    candidate.cfg.level2.speed_max = in->speed_max;
+    candidate.y_boost_scaled = (in->y_boost - 1000) / 10;
+    int ret = accel_validate_config(&candidate);
+    if (ret < 0) {
+        return ret == ACCEL_ERR_OUT_OF_RANGE || ret == ACCEL_ERR_OVERFLOW ? -ERANGE : -EINVAL;
+    }
+
+    struct accel_data *data = dev->data;
+    key = k_spin_lock(&config_lock);
+    if (memcmp(&cfg->cfg.level2, &candidate.cfg.level2, sizeof(cfg->cfg.level2)) ||
+        cfg->y_boost_scaled != candidate.y_boost_scaled) {
+        cfg->cfg.level2 = candidate.cfg.level2;
+        cfg->y_boost_scaled = candidate.y_boost_scaled;
+        data->last_time_ms = k_uptime_get_32();
+        data->recent_speed = 0;
+    }
+    k_spin_unlock(&config_lock, key);
+    return 0;
+}
+#endif
+
 
 
 // =============================================================================
@@ -159,7 +229,13 @@ int accel_handle_event(const struct device *dev, struct input_event *event,
     if (cfg->level == 1) {
         result = accel_simple_calculate(cfg, input_value, event->code);
     } else {
+#if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+        k_spinlock_key_t key = k_spin_lock(&config_lock);
+#endif
         result = accel_standard_calculate(cfg, data, input_value, event->code);
+#if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+        k_spin_unlock(&config_lock, key);
+#endif
     }
     
     // Emergency brake (simplified)

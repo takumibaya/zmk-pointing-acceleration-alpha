@@ -243,6 +243,21 @@ int32_t validate_and_clamp_input(int32_t input_value);
 int32_t safe_multiply_embedded(int32_t a, int32_t b);
 uint16_t get_acceleration_factor(int32_t abs_input, uint8_t curve_type, uint16_t max_factor);
 
+/* Level-2 runtime parameters in devicetree units. */
+struct accel_params {
+    uint16_t sensitivity;
+    uint16_t min_factor;
+    uint16_t max_factor;
+    uint16_t speed_threshold;
+    uint16_t speed_max;
+    uint16_t y_boost;
+};
+
+#if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+int accel_get_params(const struct device *dev, struct accel_params *out);
+int accel_set_params(const struct device *dev, const struct accel_params *in);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
