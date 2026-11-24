@@ -72,6 +72,22 @@ struct zmk_input_processor_state;
 #define ACCEL_EXPONENT_MIN      1
 #define ACCEL_EXPONENT_MAX      ACCEL_EXP_MAX
 
+#if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+#define ACCEL_HAS_RUNTIME_PARAMS 1
+#endif
+#if defined(ACCEL_HAS_RUNTIME_PARAMS) && defined(CONFIG_INPUT_PROCESSOR_ACCEL_LEVEL_STANDARD)
+#define ACCEL_HAS_SMOOTH 1
+#endif
+
+#define ACCEL_CURVE_STANDARD 0
+#define ACCEL_CURVE_SMOOTH 1
+#define ACCEL_SMOOTH_FIELDS(X) \
+    X(low_gain, 200, 2000) \
+    X(high_gain, 1000, 6000) \
+    X(mid_speed, 1, 100) \
+    X(ramp_width, 1, 100) \
+    X(smoothing, 1, 16)
+
 // Embedded safety limits (simplified)
 #define EMERGENCY_LIMIT         200     // Emergency clamp
 #define ACCEL_THRESHOLD         5       // Basic threshold
@@ -196,17 +212,37 @@ union accel_level_config {
         uint16_t speed_max;        // Speed maximum
         uint8_t acceleration_exponent; // Curve exponent
         uint8_t reserved;          // Padding
-    } level2;                      // 10 bytes
+#if defined(ACCEL_HAS_RUNTIME_PARAMS)
+        uint16_t low_gain;
+        uint16_t high_gain;
+        uint8_t curve;
+        uint8_t mid_speed;
+        uint8_t ramp_width;
+        uint8_t smoothing;
+#endif
+    } level2;
 } __packed;
 
-/**
- * @brief Compact acceleration data structure for embedded systems - 6 bytes
- * Optimized for keyboard/pointing devices with limited RAM
- */
+#if defined(ACCEL_HAS_SMOOTH)
+struct accel_smooth_data {
+    uint32_t last_frame_ms;
+    uint32_t magnitude[2];
+    int64_t speed;
+    int16_t remainder[2];
+    uint16_t gain;
+    bool frame_open;
+};
+#endif
+
 struct accel_data {
     uint32_t last_time_ms;         // Last event timestamp
     uint16_t recent_speed;         // Moving average speed
+#if defined(ACCEL_HAS_SMOOTH)
+    struct accel_smooth_data smooth;
+};
+#else
 } __packed;
+#endif
 
 /**
  * @brief Embedded-optimized configuration structure - 16 bytes  
@@ -251,6 +287,10 @@ struct accel_params {
     uint16_t speed_threshold;
     uint16_t speed_max;
     uint16_t y_boost;
+    uint16_t curve;
+#define ACCEL_PARAM(field, lo, hi) uint16_t field;
+    ACCEL_SMOOTH_FIELDS(ACCEL_PARAM)
+#undef ACCEL_PARAM
 };
 
 #if !defined(CONFIG_ZMK_SPLIT) || defined(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)

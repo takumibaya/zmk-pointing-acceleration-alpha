@@ -344,6 +344,21 @@ The acceleration processor provides several settings to customize how your point
   - At this speed and above, max-factor is applied
   - Example: `speed-max = <6000>` means you reach max acceleration at high speeds
 
+### Level 2 SMOOTH curve
+
+On a standalone keyboard or split central, `curve = <1>` selects SMOOTH;
+the default `curve = <0>` keeps the legacy STANDARD curve. SMOOTH uses
+the previous report's moving average of
+`floor(sqrt(sum(abs(dx))² + sum(abs(dy))²))`, in counts per report.
+It interpolates from `low-gain` to `high-gain` with `t²(3−2t)`, where `t`
+runs from 0 at `mid-speed − ramp-width` to 1 at `mid-speed + ramp-width`.
+
+Defaults: `low-gain = <1000>`, `high-gain = <2500>` (gain in thousandths),
+`mid-speed = <30>`, `ramp-width = <30>`, `smoothing = <4>` (EMA divisor).
+SMOOTH uses `y-boost` but ignores the legacy speed and sensitivity settings.
+It carries fractional X/Y motion between reports, clears that carry and the
+speed average after a gap over 100 ms, and leaves wheel events unchanged.
+
 ### Acceleration Behavior
 
 - `min-factor`: (Default: 1000) **[Level 2 Standard only]**

@@ -103,3 +103,33 @@ properties:
       [ALL LEVELS] Pointing device sensor DPI/CPI setting.
       Used for automatic sensitivity scaling. Common values: 400, 800, 1200, 1600, 3200.
       Higher DPI sensors will have reduced sensitivity to maintain consistent feel.
+
+  curve:
+    type: int
+    default: 0
+    description: Level 2 response curve (0 = STANDARD, 1 = SMOOTH).
+
+  low-gain:
+    type: int
+    default: 1000
+    description: SMOOTH low-speed gain in thousandths (200..2000).
+
+  high-gain:
+    type: int
+    default: 2500
+    description: SMOOTH high-speed gain in thousandths (1000..6000, at least low-gain).
+
+  mid-speed:
+    type: int
+    default: 30
+    description: SMOOTH ramp midpoint in counts/report (1..100).
+
+  ramp-width:
+    type: int
+    default: 30
+    description: SMOOTH ramp half-width in counts/report (1..100, at most mid-speed).
+
+  smoothing:
+    type: int
+    default: 4
+    description: SMOOTH EMA divisor in reports (1..16).
