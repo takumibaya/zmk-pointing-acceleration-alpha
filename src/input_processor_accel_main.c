@@ -238,8 +238,9 @@ int accel_handle_event(const struct device *dev, struct input_event *event,
 #endif
     }
     
-    // Emergency brake (simplified)
-    if (abs(result) > EMERGENCY_LIMIT) {
+    // Emergency brake (simplified). Level 2 works in int32 on an input clamped to
+    // +-MAX_INPUT_VALUE, so its output is bounded and only saturated to int16 below.
+    if (cfg->level == 1 && abs(result) > EMERGENCY_LIMIT) {
         result = (result > 0) ? EMERGENCY_LIMIT : -EMERGENCY_LIMIT;
     }
     

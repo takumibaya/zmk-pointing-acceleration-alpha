@@ -50,8 +50,11 @@ int32_t accel_standard_calculate(const struct accel_config *cfg, struct accel_da
         if (sensitivity > 2000) sensitivity = 2000;
     }
     
-    // Apply base sensitivity  
-    int32_t result = safe_multiply_embedded(input_value, sensitivity) / 1000;
+    // Intermediates use plain int32 math: |input| <= MAX_INPUT_VALUE (200), sensitivity <= 2000,
+    // factor and y-boost <= 3000, so the largest product (3600 * 3000) fits. The previous
+    // safe_multiply_embedded() saturated each product at INT16_MAX, which capped the output at
+    // 32 counts per event. Only the final result is saturated to the int16 range below.
+    int32_t result = (input_value * (int32_t)sensitivity) / 1000;
     
     // Speed-based acceleration
     uint16_t factor = min_factor;
@@ -67,13 +70,13 @@ int32_t accel_standard_calculate(const struct accel_config *cfg, struct accel_da
     
     // Apply acceleration factor
     if (factor > 1000) {
-        result = safe_multiply_embedded(result, factor) / 1000;
+        result = (result * (int32_t)factor) / 1000;
     }
     
     // Y-axis boost (simplified)
     if (code == INPUT_REL_Y && cfg->y_boost_scaled > 0) {
         uint16_t y_boost = 1000 + (cfg->y_boost_scaled * 10);
-        result = safe_multiply_embedded(result, y_boost) / 1000;
+        result = (result * (int32_t)y_boost) / 1000;
     }
     
     // Ensure minimum movement
